@@ -1,4 +1,11 @@
+-- Not sure how much this optimizes but any bit helps in this case
+local WHITE_COLOR3 = Color3.new(1, 1, 1)
 local BLANK_COLOR3 = Color3.new()
+
+local insert = table.insert
+local vec2 = Vector2.new
+local colorSeq = ColorSequence.new
+local colorSeqKeypoint = ColorSequenceKeypoint.new
 
 local Canvas = {}
 
@@ -14,6 +21,8 @@ end
 
 function Canvas:SetPixel(x, y, color3)
     self.Pixels[("%s,%s"):format(x, y)] = color3
+    self._prerenderData = {}
+    return self
 end
 
 function Canvas:GetPixel(x, y)
@@ -28,7 +37,7 @@ function Canvas:Prerender()
         local preRenderData = {}
 
         repeat
-            local posStart = Vector2.new(x, y)
+            local posStart = vec2(x, y)
             local posEnd
             local colors = {}
             local width
@@ -38,7 +47,7 @@ function Canvas:Prerender()
                 local curColor3 = self:GetPixel(x, y)
 
                 if (lastColor3 and lastColor3.Color3 or lastColor3) ~= curColor3 then
-                    table.insert(
+                    insert(
                         colors,
                         {
                             X = x - posStart.X,
@@ -49,7 +58,7 @@ function Canvas:Prerender()
 
                 x += 1
             until #colors == 10 or x > canvasSize.X
-            posEnd = Vector2.new(x, y)
+            posEnd = vec2(x, y)
             width = posEnd.X - posStart.X
 
             local colorSequence = {}
@@ -62,23 +71,23 @@ function Canvas:Prerender()
                 colorEnd = colorEnd and colorEnd.X
                 colorEnd = i == #colors and 1 or colorEnd / width - 0.001
 
-                table.insert(
+                insert(
                     colorSequence,
-                    ColorSequenceKeypoint.new(
+                    colorSeqKeypoint(
                         colorStart,
                         color3
                     )
                 )
-                table.insert(
+                insert(
                     colorSequence,
-                    ColorSequenceKeypoint.new(
+                    colorSeqKeypoint(
                         colorEnd,
                         color3
                     )
                 )
             end
 
-            table.insert(
+            insert(
                 preRenderData,
                 {
                     Width = width,
@@ -87,7 +96,7 @@ function Canvas:Prerender()
             )
         until x > canvasSize.X
 
-        table.insert(self._prerenderData, preRenderData)
+        insert(self._prerenderData, preRenderData)
     end
 
     return self
@@ -98,7 +107,7 @@ function Canvas:Render()
 
     local canvas = Instance.new("Frame")
     canvas.BackgroundTransparency = 1
-    canvas.Size = UDim2.new(0, canvasSize.X, 0, canvasSize.Y)
+    canvas.Size = UDim2.fromOffset(canvasSize.X, canvasSize.Y)
 
     if #self._prerenderData == 0 then
         self:Prerender()
@@ -110,17 +119,13 @@ function Canvas:Render()
         for _,frameData in ipairs(preRenderData) do
             local frame = Instance.new("Frame")
             frame.BorderSizePixel = 0
-            frame.Position = UDim2.new(
+            frame.Position = UDim2.fromScale(
                 (x - 1) / canvasSize.X,
-                0,
-                (y - 1) / canvasSize.Y,
-                0
+                (y - 1) / canvasSize.Y
             )
-            frame.Size = UDim2.new(
+            frame.Size = UDim2.fromScale(
                 frameData.Width / canvasSize.X,
-                0,
-                1 / canvasSize.Y,
-                0
+                1 / canvasSize.Y
             )
 
             local colorSequence = frameData.ColorSequence
@@ -128,9 +133,9 @@ function Canvas:Render()
                 -- UIGradient would be a solid color which is redundant
                 frame.BackgroundColor3 = colorSequence[1].Value
             else
-                frame.BackgroundColor3 = Color3.new(1, 1, 1)
+                frame.BackgroundColor3 = WHITE_COLOR3
                 local gradient = Instance.new("UIGradient")
-                gradient.Color = ColorSequence.new(colorSequence)
+                gradient.Color = colorSeq(colorSequence)
                 gradient.Parent = frame
             end
 
