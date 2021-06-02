@@ -7,27 +7,25 @@ function Canvas.new(x, y)
 
     canvas.Size = Vector2.new(x, y)
     canvas.Pixels = {}
+    canvas._prerenderData = {}
 
     return setmetatable(canvas, {__index = Canvas})
 end
 
-function Canvas:SetColor3(x, y, color3)
+function Canvas:SetPixel(x, y, color3)
     self.Pixels[("%s,%s"):format(x, y)] = color3
 end
 
-function Canvas:GetColor3(x, y)
+function Canvas:GetPixel(x, y)
     return self.Pixels[("%s,%s"):format(x, y)] or BLANK_COLOR3
 end
 
-function Canvas:Render()
+function Canvas:Prerender()
     local canvasSize = self.Size
-
-    local canvas = Instance.new("Frame")
-    canvas.BackgroundTransparency = 1
-    canvas.Size = UDim2.new(0, canvasSize.X, 0, canvasSize.Y)
 
     for y = 1, canvasSize.Y do
         local x = 1
+        local preRenderData = {}
 
         repeat
             local posStart = Vector2.new(x, y)
@@ -37,7 +35,7 @@ function Canvas:Render()
 
             repeat
                 local lastColor3 = colors[#colors]
-                local curColor3 = self:GetColor3(x, y)
+                local curColor3 = self:GetPixel(x, y)
 
                 if (lastColor3 and lastColor3.Color3 or lastColor3) ~= curColor3 then
                     table.insert(
@@ -80,28 +78,66 @@ function Canvas:Render()
                 )
             end
 
+            table.insert(
+                preRenderData,
+                {
+                    Width = width,
+                    ColorSequence = colorSequence,
+                }
+            )
+        until x > canvasSize.X
+
+        table.insert(self._prerenderData, preRenderData)
+    end
+
+    return self
+end
+
+function Canvas:Render()
+    local canvasSize = self.Size
+
+    local canvas = Instance.new("Frame")
+    canvas.BackgroundTransparency = 1
+    canvas.Size = UDim2.new(0, canvasSize.X, 0, canvasSize.Y)
+
+    if #self._prerenderData == 0 then
+        self:Prerender()
+    end
+
+    for y, preRenderData in ipairs(self._prerenderData) do
+        local x = 0
+
+        for _,frameData in ipairs(preRenderData) do
             local frame = Instance.new("Frame")
-            frame.BackgroundColor3 = Color3.new(1, 1, 1)
             frame.BorderSizePixel = 0
             frame.Position = UDim2.new(
-                (posStart.X - 1) / canvasSize.X,
+                (x - 1) / canvasSize.X,
                 0,
-                (posStart.Y - 1) / canvasSize.Y,
+                (y - 1) / canvasSize.Y,
                 0
             )
             frame.Size = UDim2.new(
-                width / canvasSize.X,
+                frameData.Width / canvasSize.X,
                 0,
                 1 / canvasSize.Y,
                 0
             )
 
-            local gradient = Instance.new("UIGradient")
-            gradient.Color = ColorSequence.new(colorSequence)
-            gradient.Parent = frame
+            local colorSequence = frameData.ColorSequence
+            if #colorSequence == 2 then
+                -- UIGradient would be a solid color which is redundant
+                frame.BackgroundColor3 = colorSequence[1].Value
+            else
+                frame.BackgroundColor3 = Color3.new(1, 1, 1)
+                local gradient = Instance.new("UIGradient")
+                gradient.Color = ColorSequence.new(colorSequence)
+                gradient.Parent = frame
+            end
 
             frame.Parent = canvas
-        until x > canvasSize.X
+
+            x += frameData.Width
+        end
     end
 
     return canvas
