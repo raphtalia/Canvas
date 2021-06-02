@@ -1,0 +1,14 @@
+{
+    "name": "Canvas - Testing",
+    "tree": {
+        "$className": "DataModel",
+
+        "ReplicatedStorage": {
+            "$className": "ReplicatedStorage",
+
+            "Canvas": {
+                "$path": "src"
+            }
+        }
+    }
+}
