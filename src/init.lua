@@ -12,7 +12,8 @@ local Canvas = {}
 function Canvas.new(x, y)
     local canvas = {}
 
-    canvas.Size = Vector2.new(x, y)
+    canvas.Width = x
+    canvas.Height = y
     canvas.Pixels = {}
     canvas._prerenderData = {}
 
@@ -30,7 +31,7 @@ function Canvas:GetPixel(x, y)
 end
 
 function Canvas:Prerender()
-    local canvasSize = self.Size
+    local canvasSize = vec2(self.Width, self.Height)
 
     for y = 1, canvasSize.Y do
         local x = 1
@@ -103,7 +104,7 @@ function Canvas:Prerender()
 end
 
 function Canvas:Render()
-    local canvasSize = self.Size
+    local canvasSize = vec2(self.Width, self.Height)
 
     local canvas = Instance.new("Frame")
     canvas.BackgroundTransparency = 1
