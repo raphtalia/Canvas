@@ -9,20 +9,42 @@ local colorSeqKeypoint = ColorSequenceKeypoint.new
 
 local Canvas = {}
 
+local function color3FuzzyEq(c30, c31, epsilon)
+    epsilon = math.max(epsilon or 0, 1.01)
+
+    if epsilon > 1 then
+        epsilon /= 255
+    end
+
+    if c30.r > c31.r - epsilon and c30.r < c31.r + epsilon
+    and c30.g > c31.g - epsilon and c30.g < c31.g + epsilon
+    and c30.b > c31.b - epsilon and c30.b < c31.b + epsilon then
+        return true
+    end
+
+    return false
+end
+
 function Canvas.new(x, y)
     local canvas = {}
+
+    canvas._prerenderedCanvas = {}
 
     canvas.Width = x
     canvas.Height = y
     canvas.Pixels = {}
-    canvas._prerenderData = {}
+    canvas.Settings = {
+        CompressSegments = true,
+        CompressFrames = false,
+        Color3Epsilon = 4,
+    }
 
     return setmetatable(canvas, {__index = Canvas})
 end
 
 function Canvas:SetPixel(x, y, color3)
     self.Pixels[("%s,%s"):format(x, y)] = color3
-    self._prerenderData = {}
+    self._prerenderedCanvas = {}
     return self
 end
 
@@ -32,10 +54,11 @@ end
 
 function Canvas:Prerender()
     local canvasSize = vec2(self.Width, self.Height)
+    local color3Epsilon = self.Settings.Color3Epsilon
 
     for y = 1, canvasSize.Y do
         local x = 1
-        local preRenderData = {}
+        local prerenderSegment = {}
 
         repeat
             local posStart = vec2(x, y)
@@ -47,7 +70,7 @@ function Canvas:Prerender()
                 local lastColor3 = colors[#colors]
                 local curColor3 = self:GetPixel(x, y)
 
-                if (lastColor3 and lastColor3.Color3 or lastColor3) ~= curColor3 then
+                if not lastColor3 or not color3FuzzyEq(lastColor3.Color3, curColor3, color3Epsilon) then
                     insert(
                         colors,
                         {
@@ -70,7 +93,7 @@ function Canvas:Prerender()
 
                 colorStart /= width
                 colorEnd = colorEnd and colorEnd.X
-                colorEnd = i == #colors and 1 or colorEnd / width - 0.001
+                colorEnd = i == #colors and 1 or colorEnd / width - 0.0001
 
                 insert(
                     colorSequence,
@@ -88,16 +111,64 @@ function Canvas:Prerender()
                 )
             end
 
-            insert(
-                preRenderData,
-                {
-                    Width = width,
-                    ColorSequence = colorSequence,
-                }
-            )
+            if #colorSequence > 2 then
+                insert(prerenderSegment, {width, colorSeq(colorSequence)})
+            else
+                local color3 = colorSequence[1].Value
+                local curFrame = {width, color3}
+                insert(prerenderSegment, curFrame)
+            end
         until x > canvasSize.X
 
-        insert(self._prerenderData, preRenderData)
+        local lastPrerenderSegment = self._prerenderedCanvas[#self._prerenderedCanvas]
+
+        if lastPrerenderSegment then
+            -- Combine identical segments together
+            if #lastPrerenderSegment == 1 and #prerenderSegment == 1 then
+                if self.Settings.CompressSegments then
+                    local lastPrerenderSegmentColor = lastPrerenderSegment[1][2]
+                    local curPrerenderSegmentColor = prerenderSegment[1][2]
+
+                    local lastPrerenderSegmentColorType = typeof(lastPrerenderSegmentColor)
+                    local curPrerenderSegmentColorType = typeof(curPrerenderSegmentColor)
+
+                    if (lastPrerenderSegmentColorType == "Color3" and curPrerenderSegmentColorType == "Color3"
+                    and color3FuzzyEq(lastPrerenderSegmentColor, curPrerenderSegmentColor, color3Epsilon))
+                    or (lastPrerenderSegmentColorType == "ColorSequence" and curPrerenderSegmentColorType == "ColorSequence"
+                    and lastPrerenderSegmentColor == curPrerenderSegmentColor) then
+                        local frame = lastPrerenderSegment[1]
+                        frame[3] = (frame[3] or 1) + 1
+                        continue
+                    end
+                end
+            else
+                if self.Settings.CompressFrames then
+                    -- Combine identical frames together
+                    for i = 1, math.min(#prerenderSegment, #lastPrerenderSegment) do
+                        local lastFrame = lastPrerenderSegment[i]
+                        local curFrame = prerenderSegment[i]
+
+                        if type(lastFrame) == "table" then
+                            local lastFrameColor = lastFrame[2]
+                            local curFrameColor = curFrame[2]
+
+                            local lastFrameColorType = typeof(lastFrameColor)
+                            local curFrameColorType = typeof(curFrameColor)
+
+                            if (lastFrameColorType == "Color3" and curFrameColorType == "Color3"
+                            and color3FuzzyEq(lastFrameColor, curFrameColor, color3Epsilon))
+                            or (lastFrameColorType == "ColorSequence" and curFrameColorType == "ColorSequence"
+                            and lastFrameColor == curFrameColor) then
+                                lastFrame[3] = (lastFrame[3] or 1) + 1
+                                prerenderSegment[i] = curFrame[1]
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        insert(self._prerenderedCanvas, prerenderSegment)
     end
 
     return self
@@ -110,40 +181,59 @@ function Canvas:Render()
     canvas.BackgroundTransparency = 1
     canvas.Size = UDim2.fromOffset(canvasSize.X, canvasSize.Y)
 
-    if #self._prerenderData == 0 then
+    if #self._prerenderedCanvas == 0 then
         self:Prerender()
     end
 
-    for y, preRenderData in ipairs(self._prerenderData) do
+    local y = 1
+    for i = 1, #self._prerenderedCanvas do
         local x = 0
+        local prerenderSegment = self._prerenderedCanvas[i]
 
-        for _,frameData in ipairs(preRenderData) do
-            local frame = Instance.new("Frame")
-            frame.BorderSizePixel = 0
-            frame.Position = UDim2.fromScale(
-                (x - 1) / canvasSize.X,
-                (y - 1) / canvasSize.Y
-            )
-            frame.Size = UDim2.fromScale(
-                frameData.Width / canvasSize.X,
-                1 / canvasSize.Y
-            )
+        local minHeight
+        for _,frameData in ipairs(prerenderSegment) do
+            local frameDataType = type(frameData)
 
-            local colorSequence = frameData.ColorSequence
-            if #colorSequence == 2 then
-                -- UIGradient would be a solid color which is redundant
-                frame.BackgroundColor3 = colorSequence[1].Value
-            else
-                frame.BackgroundColor3 = WHITE_COLOR3
-                local gradient = Instance.new("UIGradient")
-                gradient.Color = colorSeq(colorSequence)
-                gradient.Parent = frame
+            if frameDataType == "table" then
+                local width = frameData[1]
+                local colorSequence = frameData[2]
+                local height = frameData[3] or 1
+
+                local frame = Instance.new("Frame")
+                frame.BorderSizePixel = 0
+                frame.Position = UDim2.fromScale(
+                    (x - 1) / canvasSize.X,
+                    (y - 1) / canvasSize.Y
+                )
+                frame.Size = UDim2.fromScale(
+                    width / canvasSize.X,
+                    1 / canvasSize.Y * height
+                )
+
+                if typeof(colorSequence) == "Color3" then
+                    -- UIGradient would be a solid color which is redundant
+                    frame.BackgroundColor3 = colorSequence
+                else
+                    frame.BackgroundColor3 = WHITE_COLOR3
+                    local gradient = Instance.new("UIGradient")
+                    gradient.Color = colorSequence
+                    gradient.Parent = frame
+                end
+
+                frame.Parent = canvas
+
+                x += width
+                if minHeight then
+                    minHeight = math.min(minHeight, height)
+                else
+                    minHeight = height
+                end
+            elseif frameDataType == "number" then
+                x += frameData
             end
-
-            frame.Parent = canvas
-
-            x += frameData.Width
         end
+
+        y += minHeight
     end
 
     return canvas
