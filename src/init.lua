@@ -2,6 +2,8 @@
 local WHITE_COLOR3 = Color3.new(1, 1, 1)
 local BLANK_COLOR3 = Color3.new()
 
+local Codec = require(script.Codec)
+
 local insert = table.insert
 local vec2 = Vector2.new
 local colorSeq = ColorSequence.new
@@ -35,7 +37,7 @@ function Canvas.new(x, y)
     canvas.Pixels = {}
     canvas.Settings = {
         CompressSegments = true,
-        CompressFrames = false,
+        CompressFrames = true,
         Color3Epsilon = 4,
     }
 
@@ -50,6 +52,16 @@ end
 
 function Canvas:GetPixel(x, y)
     return self.Pixels[("%s,%s"):format(x, y)] or BLANK_COLOR3
+end
+
+function Canvas:Encode()
+    self:Prerender()
+    return Codec.encode(self._prerenderedCanvas)
+end
+
+function Canvas:FromEncoding(encoding)
+    self._prerenderedCanvas = Codec.decode(encoding)
+    return self
 end
 
 function Canvas:Prerender()

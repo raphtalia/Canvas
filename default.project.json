@@ -1,6 +1,14 @@
 {
     "name": "Canvas",
     "tree": {
-        "$path": "src"
+        "$path": "src",
+
+        "JSON": {
+            "$path": "modules/RbxUtils/src/JSONUtils.lua"
+        },
+
+        "ColorUtils": {
+            "$path": "modules/RbxUtils/src/ColorUtils.lua"
+        }
     }
 }

@@ -1,0 +1,3 @@
+[submodule "modules/RbxUtils"]
+	path = modules/RbxUtils
+	url = https://github.com/raphtalia/RbxUtils

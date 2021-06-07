@@ -10,7 +10,7 @@ fun.
 This example uses Roblox PNG Library to render an image imported into Studio.
 
 ```lua
-local DOWNSAMPLING = 1 -- Positive integer to downsample the image
+local DOWNSCALING = 1
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
@@ -22,8 +22,8 @@ local PNG = require(ReplicatedStorage.PNG) -- Roblox PNG Library
 local file = StudioService:PromptImportFile({"png"})
 local image = PNG.new(file:GetBinaryContents())
 local canvas = Canvas.new(
-    image.Width / DOWNSAMPLING,
-    image.Height / DOWNSAMPLING
+    image.Width / DOWNSCALING,
+    image.Height / DOWNSCALING
 )
 
 function canvas:GetPixel(x, y)
@@ -33,8 +33,8 @@ function canvas:GetPixel(x, y)
         through the image to set every pixel on the canvas.
     ]]
     return image:GetPixel(
-        x * DOWNSAMPLING,
-        y * DOWNSAMPLING
+        x * DOWNSCALING,
+        y * DOWNSCALING
     )
 end
 
