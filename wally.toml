@@ -1,0 +1,9 @@
+[package]
+name = "raphtalia/canvas"
+description = "Efficient Roblox image rendering library"
+version = "1.0.0"
+license = "MIT"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
